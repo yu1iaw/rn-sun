@@ -1,31 +1,36 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Image, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
+import { Dimensions, Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from "react-native";
 import tw from "twrnc";
 import { Foundation, Feather, Ionicons } from "@expo/vector-icons";
 import { debounce } from 'lodash';
 import * as Progress from 'react-native-progress';
+import LottieView from 'lottie-react-native';
 
 import { theme, weatherImages } from "../theme";
 import { fetchLocation, fetchWeatherForecast } from "../api/weather";
 import { getHistory, storeHistory } from "../utils/asyncStorage";
 
+
 export const HomeScreen = () => {
 	const [showSearch, setShowSearch] = useState(false);
 	const [locations, setLocations] = useState([]);
+    const [cityTitle, setCityTitle] = useState('Toronto');
     const [inputOnFocus, setInputOnFocus] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [weather, setWeather] = useState({});
-    const {location, current} = weather;
+    const scrollviewRef = useRef(null);
 
     useEffect(() => {
         const defaultWeather = async () => {
             let myCity = await getHistory("city");
-            let cityName = 'New York';
+            let title = await getHistory("cityName");
+            let cityCoord = {lat: 43.7001, lon: -79.4163};
             if (myCity) {
-                cityName = myCity;
+                cityCoord = JSON.parse(myCity);
             }
-            const data = await fetchWeatherForecast({city: cityName, days: 7});
+            const data = await fetchWeatherForecast({city: cityCoord});
+            title && setCityTitle(title);
             setWeather(data);
             setIsLoading(false);
         }
@@ -36,10 +41,13 @@ export const HomeScreen = () => {
         setLocations([]);
         setShowSearch(false);
         setIsLoading(true);
-        const data = await fetchWeatherForecast({city: loc.name, days: 7});
+        const data = await fetchWeatherForecast({city: {lat: loc.lat, lon: loc.lon}});
+        setCityTitle(loc.name);
+        // console.log(data.list)
         setWeather(data);
         setIsLoading(false);
-        await storeHistory("city", loc.name);
+        await storeHistory("city", JSON.stringify({lat: loc.lat, lon: loc.lon}));
+        await storeHistory("cityName", loc.name);
     }
 
     const handleSearch = async (txt) => {
@@ -48,9 +56,14 @@ export const HomeScreen = () => {
             setLocations(data);
         }
     }
-    const handleTextDebounce = useCallback(debounce(handleSearch, 1500), [])
+    const handleTextDebounce = useCallback(debounce(handleSearch, 1200), [])
 
-    
+    const timestamp = Number(weather?.city?.sunrise + '000');
+    const hours = new Date(timestamp).getHours();
+    const minutes = new Date(timestamp).getMinutes();
+    const formattedMinutes = ('0' + minutes).slice(-2);
+
+
 	return (
 		<View style={tw`flex-1 relative`}>
 			<StatusBar style="light" />
@@ -83,53 +96,57 @@ export const HomeScreen = () => {
                             </Pressable>
                         </View>
                         {locations.length && showSearch ? (
-                            <View style={tw`absolute w-full bg-gray-300 top-16 rounded-3xl`}>
+                            <View style={tw`absolute w-full bg-[#faf0e6fa] top-16 rounded-3xl`}>
                                 {locations.map((loc, index) => {
                                     const showBorder = index + 1 !== locations.length;
-                                    const borderClass = showBorder ? 'border-b-2 border-b-gray-400' : '';
+                                    const borderClass = showBorder ? 'border-b-2 border-b-white' : '';
                                     return (
                                         <Pressable 
                                             key={index} 
-                                            style={tw.style(`flex-row items-center border-0 p-3 px-4 mb-1`, borderClass)}
+                                            style={tw.style(`flex-row items-center border-0 p-4 mb-1`, borderClass)}
                                             onPress={() => handleLocation(loc)}
                                         >
                                             <Feather name="map-pin" size={20} color="gray" />
-                                            <Text style={tw`text-gray-900 text-lg ml-2`}>{loc?.name}, {loc?.country}</Text>
+                                            <Text style={tw`text-gray-900 text-base ml-2`}>{loc?.name}, {loc?.country}</Text>
                                         </Pressable>
                                     )
                                 })}
                             </View>
                         ) : null}
                     </View>
-                    <View style={tw`mx-4 justify-around flex-1 my-3`}>
-                        <Text style={tw`text-white text-center text-2xl font-bold`}>
-                            {location?.name},
-                            <Text style={tw`text-lg font-semibold text-gray-300`}> {location?.country}</Text>
-                        </Text>
-                        <View style={tw`flex-row justify-center`}>
-                            {/* <Image source={{uri: `https:${current?.condition?.icon}`}} style={tw`w-16 h-16`}/> */}
-                            <Image source={weatherImages(current?.condition?.text)} style={tw`w-32 h-32`} />
-                        </View>
-                        <View style={tw`mb-2`}>
-                            <Text style={tw`text-center font-bold text-white text-5xl ml-5`}>{Math.round(current?.temp_c)}&#176;</Text>
-                            <Text style={tw`text-center text-white text-xl tracking-wider`}>{current?.condition?.text}</Text>
-                        </View>
-                        <View style={tw`flex-row justify-between mx-3`}>
-                            <View style={tw`flex-row items-center`}>
-                                <Image source={require('../assets/icons/wind.png')} style={tw`w-6 h-6`} />
-                                <Text style={tw`text-white font-semibold text-base ml-2`}>{current?.wind_kph}km</Text>
+                    <TouchableWithoutFeedback onPress={() => {
+                        if (showSearch) setShowSearch(false)
+                    }}>
+                        <View style={tw`mx-4 justify-evenly flex-1 my-3`}>
+                            <Text style={tw`text-white text-center text-2xl font-bold`}>
+                                {cityTitle},
+                                <Text style={tw`text-lg font-semibold text-gray-300`}> {weather.city.country}</Text>
+                            </Text>
+                            <View style={tw`flex-row justify-center`}>
+                                {/* <Image source={{uri: `https:${current?.condition?.icon}`}} style={tw`w-16 h-16`}/> */}
+                                <LottieView source={weatherImages(weather.list[0].weather[0].description)} style={styles.lottieImage} autoPlay loop />
                             </View>
-                            <View style={tw`flex-row items-center`}>
-                                <Image source={require('../assets/icons/drop.png')} style={tw`w-6 h-6`} />
-                                <Text style={tw`text-white font-semibold text-base ml-1`}>{current?.humidity}%</Text>
+                            <View style={tw`mb-2`}>
+                                <Text style={tw`text-center font-bold text-white text-5xl ml-4`}>{Math.round(weather.list[0].main.temp)}&#176;</Text>
+                                <Text style={tw`text-center text-white text-xl tracking-wider`}>{weather.list[0].weather[0].description}</Text>
                             </View>
-                            <View style={tw`flex-row items-center`}>
-                                <Image source={require('../assets/icons/sun.png')} style={tw`w-6 h-6`} />
-                                <Text style={tw`text-white font-semibold text-base ml-2`}>{weather?.forecast?.forecastday[0]?.astro?.sunrise}</Text>
+                            <View style={tw`flex-row justify-between mx-3`}>
+                                <View style={tw`flex-row items-center`}>
+                                    <Image source={require('../assets/icons/wind.png')} style={tw`w-6 h-6`} />
+                                    <Text style={tw`text-white font-semibold text-base ml-2`}>{Math.round(weather.list[0].wind.speed)}km</Text>
+                                </View>
+                                <View style={tw`flex-row items-center`}>
+                                    <Image source={require('../assets/icons/drop.png')} style={tw`w-6 h-6`} />
+                                    <Text style={tw`text-white font-semibold text-base ml-1`}>{weather.list[0].main.humidity}%</Text>
+                                </View>
+                                <View style={tw`flex-row items-center`}>
+                                    <Image source={require('../assets/icons/sun.png')} style={tw`w-6 h-6`} />
+                                    <Text style={tw`text-white font-semibold text-base ml-2`}>{hours}:{formattedMinutes} AM</Text>
+                                </View>
                             </View>
                         </View>
-                    </View>
-                    <View>
+                    </TouchableWithoutFeedback>
+                    <View style={tw.style(showSearch && 'hidden')}>
                         <View style={tw`flex-row items-center mx-5`}>
                             <Ionicons name="calendar" size={24} color="white" />
                             <Text style={tw`text-white text-base ml-1.5`}>Daily forecast</Text>
@@ -138,15 +155,19 @@ export const HomeScreen = () => {
                             horizontal 
                             contentContainerStyle={{paddingHorizontal: 15, paddingVertical: 10}}
                             showsHorizontalScrollIndicator={false}
+                            ref={ref => scrollviewRef.current = ref}
+                            onLayout={() => new Date().getHours() < 15 ? scrollviewRef.current.scrollTo({x:100}) : undefined}
                         >
                             {
-                                weather?.forecast?.forecastday.map((item, index) => {
+                                weather.list
+                                .filter((item, i) => item.dt_txt.slice(-8) === '12:00:00')
+                                .map((item, index) => {
                                     const week = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
                                     return (
                                         <View key={index} style={tw.style(`justify-center items-center w-24 rounded-3xl py-3 mr-3`, {backgroundColor: theme.bgWhite(0.15)})}>
-                                            <Image source={weatherImages(item?.day?.condition?.text)} style={tw`w-11 h-11`} />
-                                            <Text style={tw`text-white mb-2`}>{week[new Date(item.date).getDay()]}, {new Date(item.date).getDate()}</Text>
-                                            <Text style={tw`text-white text-xl font-semibold`}>{Math.round(item.day.avgtemp_c)}&#176;</Text>
+                                            <LottieView source={weatherImages(item.weather[0].description)} style={tw`w-11 h-11`} autoPlay loop />
+                                            <Text style={tw`text-white mb-2`}>{week[new Date(item.dt_txt.slice(0, -9)).getDay()]}, {new Date(item.dt_txt.slice(0, -9)).getDate()}</Text>
+                                            <Text style={tw`text-white text-xl font-semibold`}>{Math.round(item.main.temp)}&#176;</Text>
                                         </View>
                                     )
                                 })
@@ -159,3 +180,13 @@ export const HomeScreen = () => {
 		</View>
 	);
 };
+
+const {height} = Dimensions.get('screen');
+const formattedSize = height * 0.24;
+
+const styles = StyleSheet.create({
+    lottieImage: {
+        width: formattedSize,
+        height: formattedSize
+    }
+})

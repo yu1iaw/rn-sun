@@ -8,9 +8,9 @@ export const storeHistory = async (key, value) => {
     }
 }
 
-export const getHistory = async (key, value) => {
+export const getHistory = async (key) => {
     try {
-        const data = await AsyncStorage.getItem(key, value);
+        const data = await AsyncStorage.getItem(key);
         return data;
     } catch(e) {
         console.log(e);
