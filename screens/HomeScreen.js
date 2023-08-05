@@ -20,34 +20,48 @@ export const HomeScreen = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [weather, setWeather] = useState({});
     const scrollviewRef = useRef(null);
+    const weatherRef = useRef(null);
 
     useEffect(() => {
         const defaultWeather = async () => {
-            let myCity = await getHistory("city");
-            let title = await getHistory("cityName");
-            let cityCoord = {lat: 43.7001, lon: -79.4163};
-            if (myCity) {
-                cityCoord = JSON.parse(myCity);
-            }
-            const data = await fetchWeatherForecast({city: cityCoord});
-            title && setCityTitle(title);
-            setWeather(data);
-            setIsLoading(false);
+            try {
+                let myCity = await getHistory("city");
+                let title = await getHistory("cityName");
+                let cityCoord = {lat: 43.7001, lon: -79.4163};
+                if (myCity) {
+                    cityCoord = JSON.parse(myCity);
+                }
+                const data = await fetchWeatherForecast({city: cityCoord});
+                title && setCityTitle(title);
+                setWeather(data);
+                weatherRef.current = data;
+                setIsLoading(false);
+            } catch(e) {
+                console.log(e.message);
+            } 
         }
         defaultWeather();
     }, [])
+    
 
     const handleLocation = async (loc) => {
-        setLocations([]);
-        setShowSearch(false);
-        setIsLoading(true);
-        const data = await fetchWeatherForecast({city: {lat: loc.lat, lon: loc.lon}});
-        setCityTitle(loc.name);
-        // console.log(data.list)
-        setWeather(data);
-        setIsLoading(false);
-        await storeHistory("city", JSON.stringify({lat: loc.lat, lon: loc.lon}));
-        await storeHistory("cityName", loc.name);
+        try {
+            setLocations([]);
+            setShowSearch(false);
+            setIsLoading(true);
+            const data = await fetchWeatherForecast({city: {lat: loc.lat, lon: loc.lon}});
+            setCityTitle(loc.name);
+            // console.log(data.list)
+            setWeather(data);
+            weatherRef.current = data;
+            await storeHistory("city", JSON.stringify({lat: loc.lat, lon: loc.lon}));
+            await storeHistory("cityName", loc.name);
+        } catch(e) {
+            console.log(e.message);
+            setWeather(weatherRef.current);
+        } finally {
+            setIsLoading(false);
+        }
     }
 
     const handleSearch = async (txt) => {
@@ -59,9 +73,7 @@ export const HomeScreen = () => {
     const handleTextDebounce = useCallback(debounce(handleSearch, 1200), [])
 
     const timestamp = Number(weather?.city?.sunrise + '000');
-    const hours = new Date(timestamp).getHours();
-    const minutes = new Date(timestamp).getMinutes();
-    const formattedMinutes = ('0' + minutes).slice(-2);
+    const timeStr = new Date(timestamp).toLocaleTimeString().slice(0, -3);
 
 
 	return (
@@ -119,7 +131,7 @@ export const HomeScreen = () => {
                     }}>
                         <View style={tw`mx-4 justify-evenly flex-1 my-3`}>
                             <Text style={tw`text-white text-center text-2xl font-bold`}>
-                                {cityTitle},
+                                {cityTitle === 'Kiev' ? 'Kyiv' : cityTitle},
                                 <Text style={tw`text-lg font-semibold text-gray-300`}> {weather.city.country}</Text>
                             </Text>
                             <View style={tw`flex-row justify-center`}>
@@ -141,7 +153,7 @@ export const HomeScreen = () => {
                                 </View>
                                 <View style={tw`flex-row items-center`}>
                                     <Image source={require('../assets/icons/sun.png')} style={tw`w-6 h-6`} />
-                                    <Text style={tw`text-white font-semibold text-base ml-2`}>{hours}:{formattedMinutes} AM</Text>
+                                    <Text style={tw`text-white font-semibold text-base ml-2`}>{timeStr}</Text>
                                 </View>
                             </View>
                         </View>
